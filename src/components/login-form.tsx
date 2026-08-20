@@ -142,9 +142,9 @@ export function LoginForm() {
         {loading ? "Authenticating..." : "Sign In"}
       </button>
 
-      <div className="text-center text-[10px] text-zinc-500">
+      {/* <div className="text-center text-[10px] text-zinc-500">
         <span>Default: admin@urbanflame.com / Admin@2026</span>
-      </div>
+      </div> */}
     </form>
   )
 }
