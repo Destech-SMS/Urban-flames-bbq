@@ -1,24 +1,15 @@
 // app/api/staff/route.ts
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/client'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
     
-    // Get the user from the session
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    
-    if (userError) {
-      console.error('User error:', userError)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized - No user found' }, { status: 401 })
-    }
-
-    console.log('✅ API authenticated as:', user.email)
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
@@ -46,7 +37,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Get stats
     const stats = {
       total: data?.length || 0,
       kitchen: data?.filter(s => s.group === 'kitchen').length || 0,
@@ -64,7 +54,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
@@ -109,7 +99,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
@@ -159,7 +149,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {

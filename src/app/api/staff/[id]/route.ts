@@ -1,20 +1,22 @@
 // app/api/staff/[id]/route.ts
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/client'
 import { NextResponse } from 'next/server'
 
+// Fix: Use proper Next.js types with Promise for params
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    // Await the params
+    const { id } = await params
+    
+    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const { id } = params
 
     const { data: staff, error } = await supabase
       .from('contacts')
@@ -40,17 +42,19 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    // Await the params
+    const { id } = await params
+    
+    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = params
     const { name, phone, role } = await request.json()
 
     if (!name) {
