@@ -33,6 +33,7 @@ import {
   Loader2,
   ArrowLeft,
   Coins,
+  RefreshCw,
 } from "lucide-react"
 
 interface Contact {
@@ -64,10 +65,11 @@ export default function MessagePage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [showContactList, setShowContactList] = useState(false)
   const [smsCredits, setSmsCredits] = useState(0)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   const categories: Category[] = [
     {
-      id: "customers",
+      id: "customer",
       label: "Customers",
       icon: <Users className="size-5" />,
       description: "All your restaurant customers"
@@ -123,10 +125,27 @@ export default function MessagePage() {
       const contactsResponse = await fetch('/api/contacts')
       const contactsResult = await contactsResponse.json()
       
-      console.log('Contacts fetched:', contactsResult.data?.length || 0)
+      console.log('📊 Contacts API Response:', contactsResult)
       
       if (contactsResult.success) {
-        setContacts(contactsResult.data || [])
+        const contactList = contactsResult.data || []
+        setContacts(contactList)
+        
+        // Debug: Log contact groups
+        const groups = contactList.reduce((acc: any, c: Contact) => {
+          acc[c.group] = (acc[c.group] || 0) + 1
+          return acc
+        }, {})
+        console.log('📊 Contact groups:', groups)
+        
+        setDebugInfo({
+          totalContacts: contactList.length,
+          groups: groups,
+          firstContact: contactList[0] || null
+        })
+      } else {
+        console.error('❌ Failed to fetch contacts:', contactsResult.error)
+        setError(contactsResult.error || 'Failed to load contacts')
       }
 
       // Fetch SMS credit balance from database
@@ -135,10 +154,10 @@ export default function MessagePage() {
       
       if (balanceResult.success) {
         setSmsCredits(balanceResult.data.balance || 0)
-        console.log('SMS Credits available:', balanceResult.data.balance)
+        console.log('💰 SMS Credits available:', balanceResult.data.balance)
       }
     } catch (error) {
-      console.error('Error fetching data:', error)
+      console.error('❌ Error fetching data:', error)
       setError('Failed to load data')
     } finally {
       setLoading(false)
@@ -352,17 +371,34 @@ export default function MessagePage() {
                 <p className="text-sm text-zinc-400">Compose and send messages to your contacts</p>
               </div>
             </div>
-            <div className="flex items-center gap-3 bg-zinc-800/50 border border-zinc-700 rounded-lg px-4 py-2">
-              <Coins className="size-4 text-amber-400" />
-              <span className="text-sm text-zinc-300">{smsCredits} credits</span>
-              <a
-                href="/dashboard/credits"
-                className="text-xs text-orange-400 hover:text-orange-300 font-medium"
+            <div className="flex items-center gap-3">
+              <button
+                onClick={fetchData}
+                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-200"
+                title="Refresh contacts"
               >
-                Buy More
-              </a>
+                <RefreshCw className="size-4" />
+              </button>
+              <div className="flex items-center gap-3 bg-zinc-800/50 border border-zinc-700 rounded-lg px-4 py-2">
+                <Coins className="size-4 text-amber-400" />
+                <span className="text-sm text-zinc-300">{smsCredits} credits</span>
+                <a
+                  href="/dashboard/credits"
+                  className="text-xs text-orange-400 hover:text-orange-300 font-medium"
+                >
+                  Buy More
+                </a>
+              </div>
             </div>
           </div>
+
+          {/* Debug Info (Hidden by default, shows in console) */}
+          {debugInfo && (
+            <div className="bg-zinc-800/30 border border-zinc-700 rounded-lg p-3 text-xs text-zinc-500 hidden">
+              <div>Total Contacts: {debugInfo.totalContacts}</div>
+              <div>Groups: {JSON.stringify(debugInfo.groups)}</div>
+            </div>
+          )}
 
           {/* Error & Success Messages */}
           {error && (
