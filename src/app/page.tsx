@@ -36,9 +36,9 @@ export default function RootPage() {
       <footer className="border-t border-zinc-800 py-6 text-center text-xs text-zinc-500">
         <p>© 2026 Urban Flames SMS Platform. All rights reserved.</p>
         <div className="flex justify-center gap-6 mt-3">
-          <span className="hover:text-zinc-300 cursor-pointer">Privacy Policy</span>
-          <span className="hover:text-zinc-300 cursor-pointer">Terms of Service</span>
-          <span className="hover:text-zinc-300 cursor-pointer">Support</span>
+          <Link href="/privacy" className="hover:text-zinc-300 transition underline">Privacy Policy</Link>
+          <Link href="/terms" className="hover:text-zinc-300 transition underline">Terms of Service</Link>
+          <Link href="/support" className="hover:text-zinc-300 transition underline">Support</Link>
         </div>
       </footer>
     </main>

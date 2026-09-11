@@ -1,20 +1,26 @@
 // app/api/paystack/verify/route.ts
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const reference = searchParams.get('reference')
+    const reference = searchParams.get('reference') || searchParams.get('trxref')
 
     if (!reference) {
       return NextResponse.json({ error: 'Reference is required' }, { status: 400 })
     }
 
     const paystackSecret = process.env.PAYSTACK_SECRET_KEY
-    if (!paystackSecret) {
-      return NextResponse.json({ error: 'Paystack not configured' }, { status: 500 })
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!paystackSecret || !supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json({ error: 'Server configuration missing' }, { status: 500 })
     }
+
+    // Initialize Supabase Admin Client to bypass RLS during the external payment redirect
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Verify transaction with Paystack
     const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
@@ -34,8 +40,6 @@ export async function GET(request: Request) {
     // Get user from metadata
     const { user_id, purpose, amount } = result.data.metadata
 
-    const supabase = await createClient()
-
     if (purpose === 'wallet_load') {
       // Get current balance
       const { data: profile, error: fetchError } = await supabase
@@ -48,8 +52,9 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Failed to fetch wallet' }, { status: 500 })
       }
 
-      const currentBalance = profile?.wallet_balance || 0
-      const newBalance = currentBalance + amount
+      const currentBalance = Number(profile?.wallet_balance) || 0
+      const amountToAdd = Number(amount) || 0
+      const newBalance = Number((currentBalance + amountToAdd).toFixed(2))
 
       // Update wallet
       const { error } = await supabase
@@ -58,7 +63,8 @@ export async function GET(request: Request) {
         .eq('id', user_id)
 
       if (error) {
-        return NextResponse.json({ error: 'Failed to update wallet' }, { status: 500 })
+        console.error('Supabase update error:', error)
+        return NextResponse.json({ error: `Failed to update wallet: ${error.message}` }, { status: 500 })
       }
 
       // Log transaction
@@ -67,7 +73,7 @@ export async function GET(request: Request) {
         .insert({
           user_id: user_id,
           type: 'load_wallet',
-          amount: amount,
+          amount: amountToAdd,
           credits_added: 0,
           status: 'completed',
         })

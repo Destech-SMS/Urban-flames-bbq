@@ -7,41 +7,39 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { event, data } = body
 
-    // Verify webhook signature (implement your own verification)
-    // const signature = request.headers.get('x-paystack-signature')
-    // verifySignature(signature, body)
-
     if (event === 'charge.success') {
       const supabase = await createClient()
       const { user_id, purpose, amount } = data.metadata
 
-      if (purpose === 'wallet_load') {
-        // First, get current balance
+      // Update this to match your credit purchase purpose
+      if (purpose === 'credits_purchase') {
+        // First, get current credits (replace 'credits' with your actual column name if different)
         const { data: profile, error: fetchError } = await supabase
           .from('profiles')
-          .select('wallet_balance')
+          .select('credits') 
           .eq('id', user_id)
           .single()
 
         if (fetchError) {
-          console.error('Failed to fetch wallet balance:', fetchError)
-          return NextResponse.json({ error: 'Failed to fetch wallet' }, { status: 500 })
+          console.error('Failed to fetch user profile:', fetchError)
+          return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 })
         }
 
-        const currentBalance = profile?.wallet_balance || 0
-        const newBalance = currentBalance + amount
+        const currentCredits = profile?.credits || 0
+        const creditsToAdd = amount // Adjust this formula if amount is in cash currency and needs conversion to credits
+        const newCredits = currentCredits + creditsToAdd
 
-        // Credit the user's wallet
+        // Credit the user's account
         const { error } = await supabase
           .from('profiles')
           .update({ 
-            wallet_balance: newBalance
+            credits: newCredits
           })
           .eq('id', user_id)
 
         if (error) {
-          console.error('Failed to update wallet:', error)
-          return NextResponse.json({ error: 'Failed to update wallet' }, { status: 500 })
+          console.error('Failed to update credits:', error)
+          return NextResponse.json({ error: 'Failed to update credits' }, { status: 500 })
         }
 
         // Log transaction
@@ -49,9 +47,9 @@ export async function POST(request: Request) {
           .from('transactions')
           .insert({
             user_id: user_id,
-            type: 'load_wallet',
+            type: 'credits_purchase',
             amount: amount,
-            credits_added: 0,
+            credits_added: creditsToAdd, // Log the actual credits added here
             status: 'completed',
           })
       }

@@ -1,7 +1,7 @@
 // app/dashboard/credits/page.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import {
   Breadcrumb,
@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/sidebar"
 import {
   Wallet,
-  Package,
   Clock,
   Zap,
   ArrowLeft,
@@ -51,13 +50,17 @@ interface Transaction {
   created_at: string
 }
 
-export default function CreditsPage() {
+export default function CreditsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reference?: string; trxref?: string; status?: string }>
+}) {
+  const resolvedSearchParams = use(searchParams)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
   const [smsCredits, setSmsCredits] = useState(0)
   const [selectedTab, setSelectedTab] = useState<'expiry' | 'non-expiry'>('expiry')
-  const [selectedBundle, setSelectedBundle] = useState<Bundle | null>(null)
   const [showLoadWallet, setShowLoadWallet] = useState(false)
   const [loadAmount, setLoadAmount] = useState<number>(10)
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -87,16 +90,20 @@ export default function CreditsPage() {
     { id: 'n10', name: 'Ultimate', amount: 500, credits: 12500, price_per_sms: 0.04, expiry_days: null, type: 'non-expiry' },
   ]
 
-  // Fetch wallet data
+  // Fetch wallet data & handle redirect verification banner
   useEffect(() => {
     fetchWalletData()
-  }, [])
+
+    const reference = resolvedSearchParams.reference || resolvedSearchParams.trxref
+    if (reference) {
+      setSuccess(`Payment successful! Reference: ${reference}. Your wallet is updating...`)
+    }
+  }, [resolvedSearchParams])
 
   const fetchWalletData = async () => {
     setLoading(true)
     setError(null)
     try {
-      // Fetch balance
       const balanceRes = await fetch('/api/wallet/balance')
       const balanceResult = await balanceRes.json()
       
@@ -105,7 +112,6 @@ export default function CreditsPage() {
         setSmsCredits(balanceResult.data.sms_credits || 0)
       }
 
-      // Fetch transactions
       const transRes = await fetch('/api/wallet/transactions')
       const transResult = await transRes.json()
       
@@ -121,7 +127,9 @@ export default function CreditsPage() {
   }
 
   const handleLoadWallet = async () => {
-    if (loadAmount < 10) {
+    const numericAmount = Number(loadAmount)
+
+    if (isNaN(numericAmount) || numericAmount < 0.5) {
       setError('Minimum load amount is GHS 10')
       return
     }
@@ -131,13 +139,12 @@ export default function CreditsPage() {
     setSuccess(null)
 
     try {
-      // Initialize Paystack payment
       const response = await fetch('/api/paystack/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: loadAmount,
-          email: 'user@email.com', // Will come from user session
+          amount: numericAmount,
+          email: 'josepholaitan18@gmail.com',
           purpose: 'wallet_load'
         })
       })
@@ -147,7 +154,6 @@ export default function CreditsPage() {
         throw new Error(result.error || 'Failed to initialize payment')
       }
 
-      // Redirect to Paystack checkout
       if (result.data.authorization_url) {
         window.location.href = result.data.authorization_url
       }
@@ -193,7 +199,6 @@ export default function CreditsPage() {
 
       setSuccess(`Successfully purchased ${bundle.name} bundle! ${bundle.credits} SMS credits added.`)
       await fetchWalletData()
-      setSelectedBundle(null)
 
     } catch (error) {
       console.error('Error purchasing bundle:', error)
@@ -235,7 +240,6 @@ export default function CreditsPage() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset className="bg-zinc-950 text-zinc-100">
-        {/* Top Header & Breadcrumb */}
         <header className="flex h-16 shrink-0 items-center gap-2 border-b border-zinc-800/80 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
           <div className="flex items-center gap-2">
             <SidebarTrigger className="-ml-1 text-zinc-400 hover:text-zinc-100" />
@@ -261,9 +265,7 @@ export default function CreditsPage() {
           </div>
         </header>
 
-        {/* Page Content */}
         <div className="flex flex-1 flex-col gap-6 p-6">
-          {/* Error & Success Messages */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-lg">
               <p className="text-sm font-medium flex items-center gap-2">
@@ -274,15 +276,20 @@ export default function CreditsPage() {
           )}
 
           {success && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-lg">
+            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-lg flex items-center justify-between">
               <p className="text-sm font-medium flex items-center gap-2">
                 <CheckCircle2 className="size-4" />
                 {success}
               </p>
+              <button 
+                onClick={fetchWalletData} 
+                className="text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 px-3 py-1 rounded-md transition"
+              >
+                Sync Balance
+              </button>
             </div>
           )}
 
-          {/* Wallet Balance */}
           <div className="bg-gradient-to-r from-orange-600 to-orange-700 rounded-xl p-6 shadow-lg">
             <div className="flex items-center justify-between">
               <div>
@@ -303,7 +310,6 @@ export default function CreditsPage() {
             </div>
           </div>
 
-          {/* Load Wallet Modal */}
           {showLoadWallet && (
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
               <div className="flex items-center justify-between mb-4">
@@ -360,7 +366,6 @@ export default function CreditsPage() {
             </div>
           )}
 
-          {/* Bundle Tabs */}
           <div className="flex border-b border-zinc-800">
             <button
               onClick={() => setSelectedTab('expiry')}
@@ -386,7 +391,6 @@ export default function CreditsPage() {
             </button>
           </div>
 
-          {/* Bundle Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {(selectedTab === 'expiry' ? expiryBundles : nonExpiryBundles).map((bundle) => (
               <div
@@ -417,7 +421,6 @@ export default function CreditsPage() {
             ))}
           </div>
 
-          {/* Transaction History */}
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6 mt-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
