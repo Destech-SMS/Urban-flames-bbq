@@ -50,6 +50,9 @@ interface Transaction {
   created_at: string
 }
 
+// ✅ HARDCODED RECEIPT EMAIL — change this to your preferred email
+const RECEIPT_EMAIL = 'josepholaitan18@gmail.com'
+
 export default function CreditsPage({
   searchParams,
 }: {
@@ -67,7 +70,6 @@ export default function CreditsPage({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  // Bundle pricing structure
   const expiryBundles: Bundle[] = [
     { id: 'e1', name: 'Starter', amount: 10, credits: 400, price_per_sms: 0.025, expiry_days: 30, type: 'expiry' },
     { id: 'e2', name: 'Basic', amount: 15, credits: 600, price_per_sms: 0.025, expiry_days: 30, type: 'expiry' },
@@ -90,7 +92,6 @@ export default function CreditsPage({
     { id: 'n10', name: 'Ultimate', amount: 500, credits: 12500, price_per_sms: 0.04, expiry_days: null, type: 'non-expiry' },
   ]
 
-  // Fetch wallet data & handle redirect verification banner
   useEffect(() => {
     fetchWalletData()
 
@@ -129,7 +130,7 @@ export default function CreditsPage({
   const handleLoadWallet = async () => {
     const numericAmount = Number(loadAmount)
 
-    if (isNaN(numericAmount) || numericAmount < 0.5) {
+    if (isNaN(numericAmount) || numericAmount < 10) {
       setError('Minimum load amount is GHS 10')
       return
     }
@@ -144,8 +145,8 @@ export default function CreditsPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: numericAmount,
-          email: 'josepholaitan18@gmail.com',
-          purpose: 'wallet_load'
+          purpose: 'wallet_load',
+          email: RECEIPT_EMAIL, // ✅ Hardcoded receipt email
         })
       })
 

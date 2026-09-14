@@ -56,44 +56,8 @@ export async function GET(request: Request) {
     if (!user_id) return fail('Missing user in metadata')
     if (!amountPaid || amountPaid <= 0) return fail('Invalid payment amount')
 
-    // 2. Idempotency Check (Informational only now)
-    const { data: existing } = await supabase
-      .from('transactions')
-      .select('id')
-      .eq('reference', reference)
-      .maybeSingle()
-
-    // If the transaction exists AND the wallet was already updated, just redirect.
-    // But we still need to check if the wallet was actually updated.
-    // For safety, we will proceed with the wallet update regardless, 
-    // using the transaction insert as the final gatekeeper.
-    
     if (purpose === 'wallet_load') {
-      // 3. Fetch current balance
-      const { data: profile, error: fetchError } = await supabase
-        .from('profiles')
-        .select('wallet_balance')
-        .eq('id', user_id)
-        .single()
-
-      if (fetchError) {
-        console.error('Fetch profile error:', fetchError)
-        return fail('Failed to fetch wallet')
-      }
-
-      // 4. Update wallet (Incrementing instead of setting)
-      // Using RPC or manual increment is safer, but we'll calculate here.
-      // NOTE: If the webhook already updated this, this will double-credit!
-      // To prevent double credit, we check if the transaction exists FIRST.
-      
-      // We'll use a transaction-safe approach:
-      // Only update the wallet if we successfully insert the transaction log.
-      
-      const currentBalance = Number(profile?.wallet_balance) || 0
-      const newBalance = Number((currentBalance + amountPaid).toFixed(2))
-
-      // 5. Log transaction FIRST (This acts as the lock)
-      // If the webhook already inserted it, this will fail with a unique constraint error (23505)
+      // 2. Log the transaction FIRST — this is our lock against double-processing
       const { error: txError } = await supabase.from('transactions').insert({
         user_id,
         type: 'load_wallet',
@@ -103,27 +67,44 @@ export async function GET(request: Request) {
         reference,
       })
 
-      // If the transaction already exists (Webhook won the race), stop here.
+      // If insert fails due to unique violation, the webhook already processed it
       if (txError) {
-        if (txError.code === '23505') { // Unique violation
-           console.log('Transaction already logged by webhook. Skipping wallet update.')
-           return NextResponse.redirect(`${redirectBase}?success=${encodeURIComponent('Payment already processed')}`)
+        if (txError.code === '23505') {
+          console.log('Verify: Transaction already logged (webhook won the race)')
+          return NextResponse.redirect(
+            `${redirectBase}?success=${encodeURIComponent('Payment already processed')}`
+          )
         }
-        console.error('Transaction log error:', txError)
+        console.error('Verify: Transaction log error:', txError)
         return fail(`Failed to log transaction: ${txError.message}`)
       }
 
-      // 6. If we successfully logged the transaction, NOW update the wallet
+      // 3. Only NOW update the wallet (transaction insert succeeded = we own this payment)
+      const { data: profile, error: fetchError } = await supabase
+        .from('profiles')
+        .select('wallet_balance')
+        .eq('id', user_id)
+        .maybeSingle()
+
+      if (fetchError || !profile) {
+        console.error('Verify: Profile not found for user', user_id)
+        return fail('User profile not found')
+      }
+
+      const currentBalance = Number(profile.wallet_balance) || 0
+      const newBalance = Number((currentBalance + amountPaid).toFixed(2))
+
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ wallet_balance: newBalance })
         .eq('id', user_id)
 
       if (updateError) {
-        console.error('Supabase update error:', updateError)
+        console.error('Verify: Wallet update error:', updateError)
         return fail(`Failed to update wallet: ${updateError.message}`)
       }
 
+      console.log(`Verify: Credited ${amountPaid} to user ${user_id}. New balance: ${newBalance}`)
     } else {
       return fail('Unknown payment purpose')
     }
