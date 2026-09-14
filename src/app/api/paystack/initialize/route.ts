@@ -16,12 +16,11 @@ export async function POST(request: Request) {
     const { amount, purpose } = await request.json()
 
     if (!amount || amount < 0.5) {
-      return NextResponse.json({ error: 'Minimum amount is GHS 10' }, { status: 400 })
+      return NextResponse.json({ error: 'Minimum amount is GHS 0.5' }, { status: 400 })
     }
 
-    // 3. Use a valid email — but it does NOT need to match anything in your DB
-    //    Use the user's real email if available, otherwise fall back to a placeholder
-    const paystackEmail = user.email || 'noreply@urbanflame.com'
+    // 3. Hardcoded email for Paystack receipt — does NOT need to match the logged-in user
+    const paystackEmail = 'josepholaitan18@gmail.com'
 
     console.log('Initialize Paystack:', {
       user_id: user.id,
@@ -37,7 +36,7 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: paystackEmail,             // Paystack receipt email (any valid email)
+        email: paystackEmail,             // Paystack receipt email (hardcoded)
         amount: Math.round(amount * 100), // convert GHS to pesewas
         callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/paystack/verify`,
         metadata: {
