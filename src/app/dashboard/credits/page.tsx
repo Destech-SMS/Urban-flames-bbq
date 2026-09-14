@@ -53,6 +53,9 @@ interface Transaction {
 // ✅ HARDCODED RECEIPT EMAIL — change this to your preferred email
 const RECEIPT_EMAIL = 'josepholaitan18@gmail.com'
 
+// ✅ MINIMUM LOAD AMOUNT (GHS)
+const MIN_LOAD_AMOUNT = 0.5
+
 export default function CreditsPage({
   searchParams,
 }: {
@@ -65,7 +68,7 @@ export default function CreditsPage({
   const [smsCredits, setSmsCredits] = useState(0)
   const [selectedTab, setSelectedTab] = useState<'expiry' | 'non-expiry'>('expiry')
   const [showLoadWallet, setShowLoadWallet] = useState(false)
-  const [loadAmount, setLoadAmount] = useState<number>(10)
+  const [loadAmount, setLoadAmount] = useState<number>(MIN_LOAD_AMOUNT)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -130,8 +133,8 @@ export default function CreditsPage({
   const handleLoadWallet = async () => {
     const numericAmount = Number(loadAmount)
 
-    if (isNaN(numericAmount) || numericAmount < 10) {
-      setError('Minimum load amount is GHS 10')
+    if (isNaN(numericAmount) || numericAmount < MIN_LOAD_AMOUNT) {
+      setError(`Minimum load amount is GHS ${MIN_LOAD_AMOUNT}`)
       return
     }
 
@@ -323,7 +326,7 @@ export default function CreditsPage({
                 </button>
               </div>
               <div className="grid grid-cols-3 md:grid-cols-5 gap-3 mb-4">
-                {[10, 20, 50, 100, 200].map((amount) => (
+                {[0.5, 1, 5, 10, 20].map((amount) => (
                   <button
                     key={amount}
                     onClick={() => setLoadAmount(amount)}
@@ -340,6 +343,8 @@ export default function CreditsPage({
               <div className="flex items-center gap-3">
                 <input
                   type="number"
+                  step="0.1"
+                  min={MIN_LOAD_AMOUNT}
                   value={loadAmount}
                   onChange={(e) => setLoadAmount(Number(e.target.value))}
                   className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:ring-1 focus:ring-orange-500"
@@ -363,7 +368,7 @@ export default function CreditsPage({
                   )}
                 </button>
               </div>
-              <p className="text-xs text-zinc-500 mt-2">Minimum load: GHS 10. Payments powered by Paystack.</p>
+              <p className="text-xs text-zinc-500 mt-2">Minimum load: GHS {MIN_LOAD_AMOUNT}. Payments powered by Paystack.</p>
             </div>
           )}
 
