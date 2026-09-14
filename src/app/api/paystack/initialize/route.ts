@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     // 2. Get amount from frontend
     const { amount, purpose } = await request.json()
 
-    if (!amount || amount < 10) {
+    if (!amount || amount < 0.5) {
       return NextResponse.json({ error: 'Minimum amount is GHS 10' }, { status: 400 })
     }
 
