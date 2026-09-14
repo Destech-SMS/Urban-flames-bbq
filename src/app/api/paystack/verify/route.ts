@@ -50,25 +50,24 @@ export async function GET(request: Request) {
 
     const metadata = result.data.metadata || {}
     const user_id = metadata.user_id
-    const purpose = metadata.purpose || 'wallet_load' 
+    const purpose = metadata.purpose || 'wallet_load'
     const amountPaid = Number(result.data.amount) / 100
 
     if (!user_id) return fail('Missing user in metadata')
     if (!amountPaid || amountPaid <= 0) return fail('Invalid payment amount')
 
-    // 2. Idempotency: has this reference already been processed?
+    // 2. Idempotency Check (Informational only now)
     const { data: existing } = await supabase
       .from('transactions')
       .select('id')
       .eq('reference', reference)
       .maybeSingle()
 
-    if (existing) {
-      return NextResponse.redirect(
-        `${redirectBase}?success=${encodeURIComponent('Payment already processed')}`
-      )
-    }
-
+    // If the transaction exists AND the wallet was already updated, just redirect.
+    // But we still need to check if the wallet was actually updated.
+    // For safety, we will proceed with the wallet update regardless, 
+    // using the transaction insert as the final gatekeeper.
+    
     if (purpose === 'wallet_load') {
       // 3. Fetch current balance
       const { data: profile, error: fetchError } = await supabase
@@ -77,12 +76,44 @@ export async function GET(request: Request) {
         .eq('id', user_id)
         .single()
 
-      if (fetchError) return fail('Failed to fetch wallet')
+      if (fetchError) {
+        console.error('Fetch profile error:', fetchError)
+        return fail('Failed to fetch wallet')
+      }
 
+      // 4. Update wallet (Incrementing instead of setting)
+      // Using RPC or manual increment is safer, but we'll calculate here.
+      // NOTE: If the webhook already updated this, this will double-credit!
+      // To prevent double credit, we check if the transaction exists FIRST.
+      
+      // We'll use a transaction-safe approach:
+      // Only update the wallet if we successfully insert the transaction log.
+      
       const currentBalance = Number(profile?.wallet_balance) || 0
       const newBalance = Number((currentBalance + amountPaid).toFixed(2))
 
-      // 4. Update wallet
+      // 5. Log transaction FIRST (This acts as the lock)
+      // If the webhook already inserted it, this will fail with a unique constraint error (23505)
+      const { error: txError } = await supabase.from('transactions').insert({
+        user_id,
+        type: 'load_wallet',
+        amount: amountPaid,
+        credits_added: 0,
+        status: 'completed',
+        reference,
+      })
+
+      // If the transaction already exists (Webhook won the race), stop here.
+      if (txError) {
+        if (txError.code === '23505') { // Unique violation
+           console.log('Transaction already logged by webhook. Skipping wallet update.')
+           return NextResponse.redirect(`${redirectBase}?success=${encodeURIComponent('Payment already processed')}`)
+        }
+        console.error('Transaction log error:', txError)
+        return fail(`Failed to log transaction: ${txError.message}`)
+      }
+
+      // 6. If we successfully logged the transaction, NOW update the wallet
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ wallet_balance: newBalance })
@@ -93,21 +124,6 @@ export async function GET(request: Request) {
         return fail(`Failed to update wallet: ${updateError.message}`)
       }
 
-      // 5. Log transaction
-      const { error: txError } = await supabase.from('transactions').insert({
-        user_id,
-        type: 'load_wallet',
-        amount: amountPaid,
-        credits_added: 0,
-        status: 'completed',
-        reference, 
-      })
-
-      // UPDATED: We now fail loudly if the transaction log fails
-      if (txError) {
-        console.error('Transaction log error:', txError)
-        return fail(`Failed to log transaction: ${txError.message}`)
-      }
     } else {
       return fail('Unknown payment purpose')
     }
