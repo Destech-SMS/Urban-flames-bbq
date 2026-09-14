@@ -6,8 +6,6 @@ export async function GET(request: Request) {
   const { origin, searchParams } = new URL(request.url)
   const reference = searchParams.get('reference') || searchParams.get('trxref')
 
-  // Use the request origin so localhost stays on localhost, and prod stays on prod.
-  // Fall back to env var if needed.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || origin
   const redirectBase = `${appUrl}/dashboard/credits`
 
@@ -15,16 +13,12 @@ export async function GET(request: Request) {
     NextResponse.redirect(`${redirectBase}?error=${encodeURIComponent(msg)}`)
 
   try {
-    if (!reference) {
-      return fail('Reference is required')
-    }
+    if (!reference) return fail('Reference is required')
 
-    // UPDATED: Matching your exact .env variable names
     const paystackSecret = process.env.PAYSTACK_SECRET_KEY
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 
-    // UPDATED: Better error message to tell you exactly what is missing
     if (!paystackSecret || !supabaseUrl || !supabaseServiceKey) {
       const missing = []
       if (!paystackSecret) missing.push('PAYSTACK_SECRET_KEY')
@@ -54,8 +48,9 @@ export async function GET(request: Request) {
       return fail('Payment verification failed')
     }
 
-    const { user_id, purpose } = result.data.metadata || {}
-    // Trust Paystack's amount (kobo) not the client metadata.
+    const metadata = result.data.metadata || {}
+    const user_id = metadata.user_id
+    const purpose = metadata.purpose || 'wallet_load' 
     const amountPaid = Number(result.data.amount) / 100
 
     if (!user_id) return fail('Missing user in metadata')
@@ -69,7 +64,6 @@ export async function GET(request: Request) {
       .maybeSingle()
 
     if (existing) {
-      // Already processed — just redirect success
       return NextResponse.redirect(
         `${redirectBase}?success=${encodeURIComponent('Payment already processed')}`
       )
@@ -99,22 +93,22 @@ export async function GET(request: Request) {
         return fail(`Failed to update wallet: ${updateError.message}`)
       }
 
-      // 5. Log transaction WITH the reference so we can dedupe next time
+      // 5. Log transaction
       const { error: txError } = await supabase.from('transactions').insert({
         user_id,
         type: 'load_wallet',
         amount: amountPaid,
         credits_added: 0,
         status: 'completed',
-        reference, // add this column in Supabase (unique index recommended)
+        reference, 
       })
 
+      // UPDATED: We now fail loudly if the transaction log fails
       if (txError) {
-        // If this fails due to unique constraint, the payment was already credited.
         console.error('Transaction log error:', txError)
+        return fail(`Failed to log transaction: ${txError.message}`)
       }
     } else {
-      // Unknown purpose — don't silently succeed
       return fail('Unknown payment purpose')
     }
 
